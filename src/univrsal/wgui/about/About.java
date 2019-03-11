@@ -55,7 +55,7 @@ public class About extends JDialog {
         openGitHubRepoButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                openURL("https://github.com/univrsal/webum");
+                openURL("https://github.com/univrsal/wgui");
             }
         });
         getFFmpegButton.addComponentListener(new ComponentAdapter() {

@@ -1,6 +1,5 @@
 package univrsal.wgui;
 
-import com.sun.xml.internal.ws.api.ResourceLoader;
 import org.apache.commons.exec.*;
 import univrsal.wgui.about.About;
 
@@ -9,8 +8,10 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.*;
-import java.io.*;
-import java.net.URL;
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.Objects;
 
 class ResultHandler extends DefaultExecuteResultHandler {
@@ -86,10 +87,11 @@ public class WebumGUI extends JDialog {
             scale filter: -vf scale:%i:%i
             threads
             title
+            file size limit
             output
      */
     private static final String FFMPEG_FORMAT = "-i \"%s\" %s -acodec libvorbis -b:a %sk %s -vcodec" +
-            " libvpx -b:v %sk %s -threads %s -metadata title=\"%s\" %s";
+            " libvpx -b:v %sk %s -threads %s -fs %sM -metadata title=\"%s\" %s";
 
     private JPanel contentPane;
     private JButton btnOK;
@@ -116,6 +118,8 @@ public class WebumGUI extends JDialog {
     private JTextField txtOutPath;
     private JTextArea txtOutput;
     private JButton aboutButton;
+    private JSlider sliderSize;
+    private JLabel lblSize;
 
     private String makeCommand() {
         int scaleW = (Integer) spinnerResW.getValue();
@@ -129,7 +133,7 @@ public class WebumGUI extends JDialog {
         String title = txtTitle.getText();
         String scale = "";
         String audio = "";
-
+        String fileSize = String.valueOf(sliderSize.getValue());
         File f = new File(txtFfmpegPath.getText());
         ffmpegFound = f.exists() && !f.isDirectory();
         f = new File(txtOutPath.getText());
@@ -155,7 +159,7 @@ public class WebumGUI extends JDialog {
         }
 
         return String.format(FFMPEG_FORMAT, txtVidPath.getText(), audio, audioBitrate,
-                volume, videoBitrate, scale, threads, title, txtOutPath.getText());
+                volume, videoBitrate, scale, threads, fileSize, title, txtOutPath.getText());
     }
 
     private String getFilePath(String title) {
@@ -259,7 +263,7 @@ public class WebumGUI extends JDialog {
         setTitle("Webum GeeYouEye");
         int cpus = Runtime.getRuntime().availableProcessors();
         sliderThreads.setMaximum(cpus + cpus / 4 );
-        sliderThreads.addChangeListener(e -> { lblThreads.setText(String.valueOf(sliderThreads.getValue()));
+        sliderThreads.addChangeListener(e -> { lblThreads.setText(sliderThreads.getValue() + " Thread(s)");
             txtCmd.setText(makeCommand()); });
 
         btnVidPath.addActionListener(e -> {
@@ -323,6 +327,7 @@ public class WebumGUI extends JDialog {
             about.setLocationRelativeTo(null);
             about.setVisible(true);
         });
+        sliderSize.addChangeListener(e -> {lblSize.setText(sliderSize.getValue() + " MB"); txtCmd.setText(makeCommand()); });
     }
 
     private void doConversion() {
