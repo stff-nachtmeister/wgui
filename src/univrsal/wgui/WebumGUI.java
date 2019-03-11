@@ -5,7 +5,9 @@ import univrsal.wgui.about.About;
 
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.text.DefaultCaret;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
@@ -41,37 +43,16 @@ class ResultHandler extends DefaultExecuteResultHandler {
 }
 
 class TextAreaOutputStream extends OutputStream {
-    private final JTextArea textArea;
-    private final StringBuilder sb = new StringBuilder();
+    private JTextArea textArea;
 
     public TextAreaOutputStream(JTextArea textArea) {
         this.textArea = textArea;
     }
 
     @Override
-    public void flush() throws IOException {
-        super.flush();
-        textArea.setText("");
-    }
-
-    @Override
-    public void close() throws IOException {
-        super.close();
-    }
-
-    @Override
-    public void write(int b) {
-        if (b == '\r') {
-            return;
-        }
-
-        if (b == '\n') {
-            final String text = sb.toString() + "\n";
-            textArea.append(text);
-            sb.setLength(0);
-        } else {
-            sb.append((char) b);
-        }
+    public void write(int b) throws IOException {
+        textArea.append(String.valueOf((char)b));
+        textArea.setCaretPosition(textArea.getDocument().getLength());
     }
 }
 
@@ -105,8 +86,6 @@ public class WebumGUI extends JDialog {
     private JSlider videoQSlider;
     private JSpinner videoQSpinner;
     private JTextField txtTitle;
-    private JSpinner spinnerResW;
-    private JSpinner spinnerResH;
     private JTextField txtCmd;
     private JSlider sliderVolume;
     private JSpinner spinnerVolume;
@@ -120,12 +99,20 @@ public class WebumGUI extends JDialog {
     private JButton aboutButton;
     private JSlider sliderSize;
     private JLabel lblSize;
+    private JSpinner spinnerResW;
+    private JSpinner spinnerResH;
+    private JCheckBox cbCrop;
+    private JSpinner spinnerX;
+    private JSpinner spinnerY;
+
 
     private String makeCommand() {
-        int scaleW = (Integer) spinnerResW.getValue();
-        int scaleH = (Integer) spinnerResH.getValue();
-        boolean ffmpegFound;
-        boolean outputExists;
+        int scaleW = (int) spinnerResW.getValue();
+        int scaleH = (int) spinnerResH.getValue();
+        boolean crop = cbCrop.isSelected();
+        int cropX = (int) spinnerX.getValue();
+        int cropY = (int) spinnerY.getValue();
+
         String audioBitrate = String.valueOf(audioQSlider.getValue());
         String volume = "";
         String videoBitrate = String.valueOf(videoQSlider.getValue());
@@ -134,20 +121,13 @@ public class WebumGUI extends JDialog {
         String scale = "";
         String audio = "";
         String fileSize = String.valueOf(sliderSize.getValue());
-        File f = new File(txtFfmpegPath.getText());
-        ffmpegFound = f.exists() && !f.isDirectory();
-        f = new File(txtOutPath.getText());
-        outputExists = f.exists();
 
-        if (scaleH != 0 && scaleW != 0 && (scaleH != -1 && scaleH !=1)) {
-            scale = String.format("-vf scale=%s:%s", String.valueOf(scaleW), String.valueOf(scaleH));
-        }
-
-        if (!txtFfmpegPath.getText().isEmpty() && !txtVidPath.getText().isEmpty() && !txtOutPath.getText().isEmpty()
-            && ffmpegFound && !outputExists) {
-            btnOK.setEnabled(true);
-        } else {
-            btnOK.setEnabled(false);
+        if (!(scaleH == 0 || scaleW == 0) && !(scaleH == -1 && scaleW == -1)) {
+            if (crop) {
+                scale = String.format("-filter:v \"crop=%s:%s:%s:%s\"", scaleW, scaleH, cropX, cropY);
+            } else {
+                scale = String.format("-vf scale=%s:%s", String.valueOf(scaleW), String.valueOf(scaleH));
+            }
         }
 
         if (!txtAudioPath.getText().isEmpty()) {
@@ -183,6 +163,7 @@ public class WebumGUI extends JDialog {
 
     private WebumGUI(Dialog d) {
         super(d);
+
         ClassLoader classloader = Thread.currentThread().getContextClassLoader();
         Image icon = new ImageIcon(Objects.requireNonNull(classloader.getResource("webum.png"))).getImage();
         setIconImage(icon);
@@ -228,11 +209,15 @@ public class WebumGUI extends JDialog {
         volumeLimit.setMinimum(sliderVolume.getMinimum());
         spinnerVolume.setModel(volumeLimit);
 
-        SpinnerNumberModel scaleLimit = new SpinnerNumberModel();
-        scaleLimit.setMinimum(-1);
-        scaleLimit.setMaximum(0xffff);
+        SpinnerNumberModel scaleLimit = new SpinnerNumberModel(0, -1, 0xffff, 1);
+        SpinnerNumberModel scaleLimit2 = new SpinnerNumberModel(0, -1, 0xffff, 1);
+        SpinnerNumberModel cropX = new SpinnerNumberModel(0, 0, 0xffff, 1);
+        SpinnerNumberModel cropY = new SpinnerNumberModel(0, 0, 0xffff, 1);
+
         spinnerResW.setModel(scaleLimit);
-        spinnerResH.setModel(scaleLimit);
+        spinnerResH.setModel(scaleLimit2);
+        spinnerX.setModel(cropX);
+        spinnerY.setModel(cropY);
 
         audioQSlider.addChangeListener(e -> {
             audioQSpinner.setValue(audioQSlider.getValue()); txtCmd.setText(makeCommand()); });
@@ -287,8 +272,8 @@ public class WebumGUI extends JDialog {
                 txtCmd.setText(makeCommand());
         });
 
-        spinnerResW.addChangeListener(this::stateChanged);
-        spinnerResH.addChangeListener(this::stateChanged);
+        spinnerResW.addChangeListener(e -> txtCmd.setText(makeCommand()));
+        spinnerResH.addChangeListener(e -> txtCmd.setText(makeCommand()));
 
 
         new FileDrop(txtVidPath, files -> {
@@ -328,6 +313,14 @@ public class WebumGUI extends JDialog {
             about.setVisible(true);
         });
         sliderSize.addChangeListener(e -> {lblSize.setText(sliderSize.getValue() + " MB"); txtCmd.setText(makeCommand()); });
+        cbCrop.addActionListener(e -> {
+            spinnerX.setEnabled(cbCrop.isSelected());
+            spinnerY.setEnabled(cbCrop.isSelected());
+            txtCmd.setText(makeCommand());
+        });
+        spinnerX.addChangeListener(e -> txtCmd.setText(makeCommand()));
+        spinnerY.addChangeListener(e -> txtCmd.setText(makeCommand()));
+
     }
 
     private void doConversion() {
@@ -338,8 +331,7 @@ public class WebumGUI extends JDialog {
 
         exe.setExitValue(1);
         exe.setWatchdog(watchdog);
-        exe.setStreamHandler(new PumpStreamHandler(new PrintStream(
-                new TextAreaOutputStream(txtOutput))));
+        exe.setStreamHandler(new PumpStreamHandler(System.out));
 
         try {
             exe.execute(cmdLine, new ResultHandler(txtOutput, watchdog));
@@ -360,14 +352,13 @@ public class WebumGUI extends JDialog {
 
     public static void main(String[] args) {
         WebumGUI dialog = new WebumGUI((Dialog)null);
+        PrintStream pS = new PrintStream(new TextAreaOutputStream(dialog.txtOutput));
+        System.setOut(pS);
+        System.setErr(pS);
         dialog.pack();
         dialog.setMinimumSize(dialog.getSize());
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
         System.exit(0);
-    }
-
-    private void stateChanged(ChangeEvent e) {
-        txtCmd.setText(makeCommand());
     }
 }
